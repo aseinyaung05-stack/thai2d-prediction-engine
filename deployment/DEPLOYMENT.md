@@ -21,7 +21,7 @@ Deploy the full stack online:
 
 ## STEP 1 — Supabase database (5 min)
 
-1. Supabase dashboard → **New project** (choose region `Singapore`).
+1. Supabase dashboard → **New project** (this deployment targets region **Tokyo `ap-northeast-1`** — Render services are configured to match).
 2. Set a strong **database password** (you'll need it twice below).
 3. When ready, open **Connect → Connection string** and copy TWO URIs:
    - **Session pooler** (port `5432`, host `aws-0-<region>.pooler.supabase.com`) → for Prisma.
@@ -171,3 +171,10 @@ first deploy. No manual curl needed.
 - [x] `CORS_ORIGINS` locked to your Vercel domain
 - [x] Rate limiting on all API routes; helmet enabled
 - [x] Secrets only in Render/Vercel dashboards — never in Git
+
+**🔐 Database password rotation (recommended after go-live):**
+The Supabase password was shared during setup. Rotate it once deployed:
+1. Supabase → Settings → Database → **Reset database password**
+2. Update both URIs (encode `@` as `%40` for the Prisma URI) in Render's
+   Environment tabs — services redeploy automatically with the new value.
+3. No data is lost; the URI is the only thing that changes.
