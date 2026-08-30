@@ -1,0 +1,17 @@
+# Keep Docker build context small (context = repo root).
+node_modules
+**/node_modules
+.venv
+**/.venv
+.next
+**/.next
+.git
+.gitignore
+*.log
+__pycache__
+**/__pycache__
+.pytest_cache
+data
+docs
+apps/web/.next
+apps/web/node_modules

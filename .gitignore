@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# builds
+.next/
+dist/
+build/
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.local
+.env.*.local
+
+# data / artifacts
+*.log
+data/artifacts/
+models/*.pkl
+
+# os
+.DS_Store
+Thumbs.db
+
+# unrelated personal folder
+burmese-voice-notes/

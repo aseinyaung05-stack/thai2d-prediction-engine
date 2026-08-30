@@ -1,0 +1,36 @@
+# ============================================================================
+# Thai 2D API — Node/Express + Prisma (multi-stage, monorepo context)
+# Build from REPO ROOT:  docker build -f deployment/Dockerfile.api -t thai2d-api .
+# ============================================================================
+
+FROM node:20-alpine AS deps
+WORKDIR /app
+# Workspaces: install everything from the root lockfile/manifests
+COPY package.json package-lock.json* ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY packages/shared/package.json packages/shared/
+RUN npm install --no-audit --no-fund
+
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json ./
+COPY apps/api ./apps/api
+COPY packages/shared ./packages/shared
+COPY database ./database
+# Prisma client needs the schema (path configured in apps/api/package.json)
+RUN cd apps/api && npx prisma generate --schema ../../database/prisma/schema.prisma
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/api ./apps/api
+COPY --from=build /app/packages/shared ./packages/shared
+COPY --from=build /app/database ./database
+# tsx runtime resolves the @thai2d/shared TS path aliases at runtime.
+# Render injects PORT (default 10000); config.ts reads process.env.PORT.
+WORKDIR /app/apps/api
+EXPOSE 4000
+CMD ["npx", "tsx", "src/index.ts"]

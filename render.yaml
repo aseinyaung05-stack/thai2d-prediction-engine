@@ -1,0 +1,116 @@
+# ============================================================================
+# Render Blueprint — Thai 2D API (Node) + Prediction Engine (Python/Docker)
+# Deploy: Render Dashboard -> New -> Blueprint -> point at this repo,
+#         or `render blueprint launch` with the Render CLI.
+# Database lives on Supabase (external) — paste its URLs as sync:false envs.
+# ============================================================================
+
+services:
+  # ---------------------------------------------------------------- API ----
+  - type: web
+    name: thai2d-api
+    runtime: node
+    plan: starter            # free tier sleeps; starter keeps it warm
+    region: singapore        # closest to Myanmar/Thailand
+    buildCommand: npm install --no-audit --no-fund && npx prisma generate --schema database/prisma/schema.prisma
+    startCommand: npx tsx apps/api/src/index.ts
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false          # paste Supabase pooled URI in the dashboard
+      - key: PREDICTION_DATABASE_URL
+        sync: false          # paste Supabase session-pooler URI (unused by API but kept for parity)
+      - key: PREDICTION_SERVICE_URL
+        fromService:
+          type: pserv
+          name: thai2d-engine
+          property: hostport
+      - key: PREDICTION_API_TOKEN
+        generateValue: true  # auto-generated secret, shared with the engine
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false          # set a strong password in the dashboard
+      - key: DATA_PROVIDER
+        value: thai2d
+      - key: THAI2D_API_BASE_URL
+        value: https://api.thaistock2d.com
+      - key: ALLOW_MOCK_DATA
+        value: "false"
+      - key: STRICT_DATA_VALIDATION
+        value: "true"
+      - key: SYNC_INTERVAL_MINUTES
+        value: "10"
+      - key: CORS_ORIGINS
+        sync: false          # e.g. https://thai2d.vercel.app
+      - key: API_RATE_LIMIT_MAX
+        value: "120"
+
+  # ------------------------------------------------------------ ENGINE -----
+  - type: pserv
+    name: thai2d-engine
+    runtime: docker
+    dockerfilePath: deployment/Dockerfile.prediction
+    dockerContext: .
+    plan: starter
+    region: singapore
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PREDICTION_DATABASE_URL
+        sync: false          # paste Supabase URI (psycopg2 form)
+      - key: PREDICTION_API_TOKEN
+        sync: false          # MUST equal the API's PREDICTION_API_TOKEN
+      - key: MAX_WALKFORWARD_STEPS
+        value: "460"
+
+  # ------------------------------------------------- DAILY RETRAIN JOB ----
+  # Runs Mon-Fri at 11:30 UTC (18:00 Yangon) — after the 4:30 PM draw has
+  # landed and the API scheduler has synced it. Pulls fresh results, then
+  # re-runs walk-forward backtests for both sessions and updates the model
+  # registry (production model only changes if it beats baselines).
+  - type: cron
+    name: thai2d-daily-retrain
+    runtime: image
+    image:
+      url: docker.io/curlimages/curl:8.11.1
+    schedule: "30 11 * * 1-5"
+    filter: succeed
+    command:
+      - sh
+      - -c
+      - |
+        echo "[retrain] syncing fresh results..."
+        curl -fsS -X POST "$API_URL/api/sync?provider=thai2d" \
+          -u "$ADMIN_USERNAME:$ADMIN_PASSWORD" || echo "[retrain] sync failed (continuing)"
+        echo "[retrain] backtest MORNING..."
+        curl -fsS --max-time 1500 -X POST "$ENGINE_URL/backtest/run" \
+          -H "Authorization: Bearer $PREDICTION_API_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"session":"MORNING"}'
+        echo "[retrain] backtest AFTERNOON..."
+        curl -fsS --max-time 1500 -X POST "$ENGINE_URL/backtest/run" \
+          -H "Authorization: Bearer $PREDICTION_API_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"session":"AFTERNOON"}'
+        echo "[retrain] done."
+    envVars:
+      - key: API_URL
+        fromService:
+          type: web
+          name: thai2d-api
+          property: hostport
+      - key: ENGINE_URL
+        fromService:
+          type: pserv
+          name: thai2d-engine
+          property: hostport
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false          # same strong password as the API
+      - key: PREDICTION_API_TOKEN
+        sync: false          # same token as API + engine

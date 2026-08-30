@@ -1,0 +1,23 @@
+# ============================================================================
+# Thai 2D Prediction Engine — FastAPI + pandas/scikit-learn
+# Build from REPO ROOT:  docker build -f deployment/Dockerfile.prediction -t thai2d-engine .
+# ============================================================================
+
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY services/prediction/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY services/prediction/prediction ./prediction
+COPY services/prediction/pytest.ini ./pytest.ini
+
+# Render injects PORT (default 10000); fall back to 8000 locally.
+ENV PORT=8000
+EXPOSE 8000
+
+CMD ["sh", "-c", "uvicorn prediction.api:app --host 0.0.0.0 --port ${PORT}"]

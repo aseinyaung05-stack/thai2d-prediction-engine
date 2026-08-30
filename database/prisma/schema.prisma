@@ -1,0 +1,182 @@
+// ============================================================================
+// Thai 2D Prediction Engine — PostgreSQL schema
+// Canonical timestamps are UTC. `date`/`localSessionDate` are Myanmar-local
+// session dates. Raw source data is never mutated after ingestion.
+// Physical names are snake_case (shared with the Python prediction service).
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum session_enum {
+  MORNING
+  AFTERNOON
+
+  @@map("session_enum")
+}
+
+enum sync_status {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+
+  @@map("sync_status")
+}
+
+/// Normalized historical 2D results.
+model Result {
+  id               String   @id @default(cuid())
+  /// Myanmar-local session date (the draw day the user sees).
+  date             DateTime @db.Date
+  session          session_enum
+  setValue         Float?   @map("set_value")
+  marketValue      Float?   @map("market_value")
+  /// Zero-padded two-digit string, e.g. "01". Never store as int.
+  twod             String   @db.Char(2)
+  digitTens        Int      @map("digit_tens")
+  digitOnes        Int      @map("digit_ones")
+  source           String
+  sourceUrl        String?  @map("source_url")
+  /// UTC instant supplied by the source market/provider.
+  sourceTimestamp  DateTime @map("source_timestamp")
+  sourceTimezone   String   @default("Asia/Bangkok") @map("source_timezone")
+  localSessionDate DateTime @db.Date @map("local_session_date")
+  sessionTimezone  String   @default("Asia/Yangon") @map("session_timezone")
+  /// SHA-256 of canonical raw record — used for duplicate detection.
+  rawRecordHash    String   @unique @map("raw_record_hash")
+  ingestedAt       DateTime @default(now()) @map("ingested_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([date, session])
+  @@index([sourceTimestamp])
+  @@index([session, date])
+  @@map("results")
+}
+
+/// Immutable prediction snapshot. Outcome fields are appended later,
+/// original snapshot columns are never modified.
+model PredictionRun {
+  id                      String    @id @default(cuid())
+  predictionTimestampUtc  DateTime  @map("prediction_timestamp_utc")
+  sessionDate             DateTime  @db.Date @map("session_date")
+  session                 session_enum
+  sourceDataCutoffUtc     DateTime  @map("source_data_cutoff_utc")
+  modelVersion            String    @map("model_version")
+  featureVersion          String    @map("feature_version")
+  trainingDataEndDate     DateTime  @db.Date @map("training_data_end_date")
+  trainingRows            Int       @map("training_rows")
+  dataTier                String    @map("data_tier")
+  edgeDetected            Boolean   @map("edge_detected")
+  edgeNotice              String?   @map("edge_notice")
+  top10                   Json      @map("top10")
+  sectionScores           Json      @map("section_scores")
+  componentModelScores    Json      @map("component_model_scores")
+  calibratedProbabilities Json      @map("calibrated_probabilities")
+  modelAgreementRatio     Float     @map("model_agreement_ratio")
+  modelConfidence         Float     @map("model_confidence")
+  dataQualityScore        Float     @map("data_quality_score")
+  explanation             Json
+  // --- outcome attachment (filled when actual result becomes known) ---
+  actualResult            String?   @db.Char(2) @map("actual_result")
+  actualSection           String?   @map("actual_section")
+  actualRank              Int?      @map("actual_rank")
+  actualTop10Hit          Boolean?  @map("actual_top10_hit")
+  predictionOutcome       String?   @map("prediction_outcome")
+  outcomeAttachedAt       DateTime? @map("outcome_attached_at")
+
+  createdAt               DateTime  @default(now()) @map("created_at")
+
+  scores                  PredictionScore[]
+
+  @@unique([predictionTimestampUtc, session])
+  @@index([sessionDate, session])
+  @@map("prediction_runs")
+}
+
+/// Per-number scores belonging to a prediction run.
+model PredictionScore {
+  id                    String        @id @default(cuid())
+  runId                 String        @map("run_id")
+  number                String        @db.Char(2)
+  rank                  Int
+  rawScore              Float         @map("raw_score")
+  calibratedProbability Float         @map("calibrated_probability")
+  section               String        @db.Char(1)
+  componentScores       Json          @map("component_scores")
+
+  run                   PredictionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, number])
+  @@index([runId, rank])
+  @@map("prediction_scores")
+}
+
+/// One row per completed backtest evaluation of a model version.
+model Backtest {
+  id                 String   @id @default(cuid())
+  modelVersion       String   @map("model_version")
+  modelName          String   @map("model_name")
+  featureVersion     String   @map("feature_version")
+  trainStart         DateTime @db.Date @map("train_start")
+  trainEnd           DateTime @db.Date @map("train_end")
+  validationStart    DateTime @db.Date @map("validation_start")
+  validationEnd      DateTime @db.Date @map("validation_end")
+  testStart          DateTime @db.Date @map("test_start")
+  testEnd            DateTime @db.Date @map("test_end")
+  nPredictions       Int      @map("n_predictions")
+  metrics            Json
+  baselineComparison Json     @map("baseline_comparison")
+  isProduction       Boolean  @default(false) @map("is_production")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([modelVersion])
+  @@map("backtests")
+}
+
+/// Append-only model registry. Old versions are never overwritten.
+model ModelVersion {
+  id                String   @id @default(cuid())
+  modelId           String   @map("model_id")
+  version           String   @unique
+  trainingStart     DateTime @db.Date @map("training_start")
+  trainingEnd       DateTime @db.Date @map("training_end")
+  trainingRows      Int      @map("training_rows")
+  selectedFeatures  Json     @map("selected_features")
+  hyperparameters   Json     @map("hyperparameters")
+  validationMetrics Json     @map("validation_metrics")
+  testMetrics       Json     @map("test_metrics")
+  isActive          Boolean  @default(false) @map("is_active")
+  notes             String?
+  creationTimestamp DateTime @default(now()) @map("creation_timestamp")
+
+  @@index([isActive])
+  @@map("model_versions")
+}
+
+/// Audit trail for every sync attempt (manual or scheduled).
+model DataSyncLog {
+  id              String      @id @default(cuid())
+  startedAt       DateTime    @map("started_at")
+  finishedAt      DateTime?   @map("finished_at")
+  status          sync_status
+  provider        String
+  trigger         String
+  recordsFetched  Int         @default(0) @map("records_fetched")
+  recordsInserted Int         @default(0) @map("records_inserted")
+  recordsSkipped  Int         @default(0) @map("records_skipped")
+  recordsRejected Int         @default(0) @map("records_rejected")
+  errorMessage    String?     @map("error_message")
+  details         Json?
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  @@index([startedAt])
+  @@map("data_sync_logs")
+}

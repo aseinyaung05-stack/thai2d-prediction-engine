@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-ink-950 text-slate-200 antialiased;
+}
+
+.card {
+  @apply rounded-xl border border-ink-700 bg-ink-900 p-5 shadow-lg shadow-black/30;
+}
+
+.card-title {
+  @apply mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold;
+}
+
+.num-chip {
+  @apply inline-flex h-9 w-12 items-center justify-center rounded-md border border-ink-700 bg-ink-800 font-mono text-sm font-bold text-slate-100;
+}
