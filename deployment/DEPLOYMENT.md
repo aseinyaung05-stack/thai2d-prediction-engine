@@ -21,7 +21,9 @@ Deploy the full stack online:
 
 ## STEP 1 — Supabase database (5 min)
 
-1. Supabase dashboard → **New project** (this deployment targets region **Tokyo `ap-northeast-1`** — Render services are configured to match).
+1. Supabase dashboard → **New project** (any region works — the database is
+   external; Render services deploy to **Singapore**, the closest Render
+   region to Myanmar. Cross-region to Supabase is fine.)
 2. Set a strong **database password** (you'll need it twice below).
 3. When ready, open **Connect → Connection string** and copy TWO URIs:
    - **Session pooler** (port `5432`, host `aws-0-<region>.pooler.supabase.com`) → for Prisma.
