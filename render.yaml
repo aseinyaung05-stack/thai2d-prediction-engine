@@ -12,8 +12,8 @@ services:
     runtime: node
     plan: starter            # free tier sleeps; starter keeps it warm
     region: singapore        # closest Render region to Myanmar (Render has no Tokyo)
-    buildCommand: npm install --no-audit --no-fund && npx prisma generate --schema database/prisma/schema.prisma
-    startCommand: npx tsx apps/api/src/index.ts
+    buildCommand: npm install --no-audit --no-fund && npx prisma generate --schema database/prisma/schema.prisma && npm run build:shared && npm run build:api
+    startCommand: node apps/api/dist/apps/api/src/index.js
     healthCheckPath: /health
     autoDeploy: true
     envVars:

@@ -1,5 +1,6 @@
 # ============================================================================
 # Thai 2D API — Node/Express + Prisma (multi-stage, monorepo context)
+# Compiles TypeScript at build time; runtime uses plain node (low memory).
 # Build from REPO ROOT:  docker build -f deployment/Dockerfile.api -t thai2d-api .
 # ============================================================================
 
@@ -19,18 +20,20 @@ COPY package.json ./
 COPY apps/api ./apps/api
 COPY packages/shared ./packages/shared
 COPY database ./database
-# Prisma client needs the schema (path configured in apps/api/package.json)
+# Prisma client + compile shared, then compile the API (plain-JS output)
 RUN cd apps/api && npx prisma generate --schema ../../database/prisma/schema.prisma
+RUN npm run build:shared && npm run build:api
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# node_modules includes the workspace symlink @thai2d/shared -> packages/shared
+# (source + compiled dist are copied below so the symlink resolves).
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/apps/api ./apps/api
 COPY --from=build /app/packages/shared ./packages/shared
+COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/database ./database
-# tsx runtime resolves the @thai2d/shared TS path aliases at runtime.
-# Render injects PORT (default 10000); config.ts reads process.env.PORT.
 WORKDIR /app/apps/api
+# Render injects PORT; config reads process.env.PORT.
 EXPOSE 4000
-CMD ["npx", "tsx", "src/index.ts"]
+CMD ["node", "dist/apps/api/src/index.js"]
