@@ -57,7 +57,8 @@ services:
     dockerContext: .
     plan: starter
     region: singapore
-    healthCheckPath: /health
+    # NOTE: pserv cannot have healthCheckPath (private, not internet-exposed).
+    # The engine still serves GET /health for internal checks.
     autoDeploy: true
     envVars:
       - key: PREDICTION_DATABASE_URL
