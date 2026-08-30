@@ -74,29 +74,10 @@ services:
   # registry (production model only changes if it beats baselines).
   - type: cron
     name: thai2d-daily-retrain
-    runtime: image
-    image:
-      url: docker.io/curlimages/curl:8.11.1
+    runtime: docker
+    dockerfilePath: deployment/Dockerfile.cron
+    dockerContext: .
     schedule: "30 11 * * 1-5"
-    filter: succeed
-    command:
-      - sh
-      - -c
-      - |
-        echo "[retrain] syncing fresh results..."
-        curl -fsS -X POST "$API_URL/api/sync?provider=thai2d" \
-          -u "$ADMIN_USERNAME:$ADMIN_PASSWORD" || echo "[retrain] sync failed (continuing)"
-        echo "[retrain] backtest MORNING..."
-        curl -fsS --max-time 1500 -X POST "$ENGINE_URL/backtest/run" \
-          -H "Authorization: Bearer $PREDICTION_API_TOKEN" \
-          -H "Content-Type: application/json" \
-          -d '{"session":"MORNING"}'
-        echo "[retrain] backtest AFTERNOON..."
-        curl -fsS --max-time 1500 -X POST "$ENGINE_URL/backtest/run" \
-          -H "Authorization: Bearer $PREDICTION_API_TOKEN" \
-          -H "Content-Type: application/json" \
-          -d '{"session":"AFTERNOON"}'
-        echo "[retrain] done."
     envVars:
       - key: API_URL
         fromService:

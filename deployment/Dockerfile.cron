@@ -1,0 +1,7 @@
+# Render Cron Job image: daily retrain (sync + walk-forward backtests).
+# Build from REPO ROOT:  docker build -f deployment/Dockerfile.cron -t thai2d-cron .
+FROM curlimages/curl:8.11.1
+
+COPY --chmod=755 deployment/retrain.sh /home/curl_user/retrain.sh
+
+ENTRYPOINT ["/home/curl_user/retrain.sh"]
