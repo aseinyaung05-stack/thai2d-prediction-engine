@@ -31,8 +31,10 @@ async function proxyPrediction(path: string, method: "GET" | "POST" = "GET"): Pr
 
 /**
  * GET /api/prediction/today
- * Both sessions. Falls back to the latest stored immutable run when the
- * live engine is unreachable — clearly flagged as cached.
+ * STORED-FIRST design: the immutable snapshot for (today, session) is served
+ * instantly from PostgreSQL. The live engine is only consulted when no
+ * snapshot exists yet, with a bounded timeout — a cold engine pipeline can
+ * take minutes, which would otherwise outrun every client.
  */
 predictionRouter.get("/today", async (_req, res) => {
   const today = new Date();
@@ -45,10 +47,35 @@ predictionRouter.get("/today", async (_req, res) => {
 
   const sessionsOut: Record<string, Json> = {};
   let anyLive = false;
+  const d = new Date(`${yangonToday}T00:00:00Z`);
 
   for (const s of SESSIONS) {
+    // 1. Instant path: today's stored immutable snapshot.
+    const storedToday = await prisma.predictionRun.findFirst({
+      where: { sessionDate: d, session: sessionFilter(s) },
+      orderBy: { predictionTimestampUtc: "desc" },
+      include: { scores: { orderBy: { rank: "asc" }, take: 10 } },
+    });
+    if (storedToday) {
+      sessionsOut[s] = { ...(storedToday as unknown as Json), stale: false };
+      anyLive = true;
+      // Fire-and-forget background refresh so the next request is fresh.
+      void proxyPrediction(`/predict/${s}?date=${yangonToday}`).catch(() => {});
+      continue;
+    }
+
+    // 2. No snapshot yet — ask the engine, but bounded so clients never hang.
     try {
-      const r = await proxyPrediction(`/predict/${s}?date=${yangonToday}`);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 45000);
+      const r = await fetch(`${config.predictionServiceUrl}/predict/${s}?date=${yangonToday}`, {
+        headers: {
+          Authorization: `Bearer ${config.predictionApiToken}`,
+          Accept: "application/json",
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
       if (r.ok) {
         const body = (await r.json()) as Json;
         sessionsOut[s] = { ...body, stale: false };
@@ -56,16 +83,17 @@ predictionRouter.get("/today", async (_req, res) => {
         continue;
       }
     } catch {
-      /* fall through to stored snapshot */
+      /* fall through */
     }
-    const d = new Date(`${yangonToday}T00:00:00Z`);
-    const stored = await prisma.predictionRun.findFirst({
-      where: { sessionDate: d, session: sessionFilter(s) },
+
+    // 3. Latest stored run for this session (any date), clearly flagged.
+    const latest = await prisma.predictionRun.findFirst({
+      where: { session: sessionFilter(s) },
       orderBy: { predictionTimestampUtc: "desc" },
       include: { scores: { orderBy: { rank: "asc" }, take: 10 } },
     });
-    sessionsOut[s] = stored
-      ? ({ ...(stored as unknown as Json), stale: true } as Json)
+    sessionsOut[s] = latest
+      ? { ...(latest as unknown as Json), stale: true }
       : { error: "No prediction available for this session yet.", stale: true };
   }
 

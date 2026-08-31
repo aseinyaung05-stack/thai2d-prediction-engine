@@ -39,8 +39,36 @@ async function runSync(trigger: "startup" | "scheduled"): Promise<void> {
     const res = await syncFromProvider(trigger);
     console.log(`[scheduler] sync ${res.status}: +${res.inserted} inserted`);
     void notifyPredictionService();
+    void refreshStoredPredictions();
   } catch (err) {
     console.error(`[scheduler] sync failed:`, (err as Error).message);
+  }
+}
+
+/** Fire-and-forget: regenerate today's stored prediction snapshots so
+ *  /api/prediction/today always has fresh data without blocking clients. */
+async function refreshStoredPredictions(): Promise<void> {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Yangon",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  for (const s of ["MORNING", "AFTERNOON"]) {
+    try {
+      await fetch(
+        `${config.predictionServiceUrl}/predict/${s}?date=${today}`,
+        {
+          headers: {
+            Authorization: `Bearer ${config.predictionApiToken}`,
+            Accept: "application/json",
+          },
+        }
+      );
+      console.log(`[scheduler] refreshed prediction snapshot: ${s}`);
+    } catch (err) {
+      console.warn(`[scheduler] snapshot refresh ${s} failed:`, (err as Error).message);
+    }
   }
 }
 
