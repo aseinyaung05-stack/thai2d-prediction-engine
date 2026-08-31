@@ -1,9 +1,10 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import CountdownMM from "@/components/CountdownMM";
 import SectionBars from "@/components/SectionBars";
 import { Notice } from "@/components/Notices";
-import { getToday, type SessionPrediction } from "@/lib/api";
-
-export const dynamic = "force-dynamic";
+import { getToday, type SessionPrediction, type TodayPayload } from "@/lib/api";
 
 const SECTION_LABELS: Record<string, string> = {
   A: "A: 00–24",
@@ -36,16 +37,13 @@ function SessionCard({
       </div>
 
       {!sp || sp.error ? (
-        <p className="text-xs text-slate-500">{sp?.error ?? "No valid data available."}</p>
+        <p className="text-xs text-slate-500">{sp?.error ?? "Loading…"}</p>
       ) : (
         <>
           <dl className="mb-4 space-y-1 text-xs">
             <div className="flex justify-between">
               <dt className="text-slate-400">Highest Model-Scored Section</dt>
-              <dd
-                className="font-bold"
-                data-testid="highest-section"
-              >
+              <dd className="font-bold" data-testid="highest-section">
                 {headline?.highest_model_scored_section ?? "—"}
               </dd>
             </div>
@@ -95,9 +93,7 @@ function SessionCard({
                   {sp.view?.edge_notice ?? "No reliable predictive edge detected."}
                 </p>
               )}
-              <p className="mt-2 text-[10px] italic text-slate-500">
-                {headline?.wording_note}
-              </p>
+              <p className="mt-2 text-[10px] italic text-slate-500">{headline?.wording_note}</p>
             </>
           )}
 
@@ -118,14 +114,9 @@ function SessionCard({
                     <td className="py-1.5 pr-2">
                       <span className="num-chip">{String(n.number).padStart(2, "0")}</span>
                     </td>
-                    <td className="py-1.5 pr-2 font-semibold text-slate-300">
-                      SECTION {n.section}
-                    </td>
+                    <td className="py-1.5 pr-2 font-semibold text-slate-300">SECTION {n.section}</td>
                     <td className="py-1.5 text-right font-mono text-accent-green">
-                      {(
-                        (n.calibrated_probability ?? n.score ?? 0) * 100
-                      ).toFixed(2)}
-                      %
+                      {(((n.calibrated_probability ?? n.score) ?? 0) * 100).toFixed(2)}%
                     </td>
                   </tr>
                 ))}
@@ -138,26 +129,44 @@ function SessionCard({
   );
 }
 
-export default async function DashboardPage() {
-  const today = await getToday();
-  const ok = "sessions" in today;
+export default function DashboardPage() {
+  const [today, setToday] = useState<TodayPayload | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getToday().then((d) => {
+      if (!cancelled) setToday(d);
+    });
+    const id = setInterval(() => {
+      getToday().then((d) => {
+        if (!cancelled) setToday(d);
+      });
+    }, 120_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  const ok = today !== null && "sessions" in today;
 
   return (
     <div className="pt-6" data-testid="dashboard-root">
-      {/* §45 headline block */}
       <div className="card mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-base font-extrabold tracking-wide text-slate-50 sm:text-lg">
             TODAY&apos;S THAI 2D MODEL ANALYSIS
           </h1>
           <p className="mt-0.5 text-[11px] text-slate-500">
-            {"date" in today ? today.date : ""} • Asia/Yangon • estimates only — not guarantees
+            {ok && today.date ? today.date : ""} • Asia/Yangon • estimates only — not guarantees
           </p>
         </div>
         <CountdownMM />
       </div>
 
-      {!ok && <Notice kind="error">API server unreachable — cannot reach the API server.</Notice>}
+      {!ok && today !== null && (
+        <Notice kind="error">API server unreachable — please retry in a moment.</Notice>
+      )}
       {ok && today.notice && <Notice kind="warn">{today.notice}</Notice>}
 
       <div className="grid gap-5 lg:grid-cols-2" data-testid="sessions-grid">

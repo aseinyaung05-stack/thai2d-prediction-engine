@@ -1,7 +1,8 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Notice } from "@/components/Notices";
 import { getBacktests, type BacktestRow } from "@/lib/api";
-
-export const dynamic = "force-dynamic";
 
 function pct(v?: number): string {
   return typeof v === "number" ? `${(v * 100).toFixed(1)}%` : "—";
@@ -54,12 +55,23 @@ function MetricsTable({ rows }: { rows: BacktestRow[] }) {
   );
 }
 
-export default async function BacktestPage() {
-  const data = await getBacktests();
-  const rows = "backtests" in data ? (data.backtests ?? []) : [];
+export default function BacktestPage() {
+  const [data, setData] = useState<{ backtests?: BacktestRow[]; error?: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getBacktests().then((d) => {
+      if (!cancelled) setData(d);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const rows = data && "backtests" in data ? data.backtests ?? [] : [];
+  const failed = data !== null && "error" in data;
   const prod = rows.find((r) => r.isProduction);
   const baseline = rows.find((r) => r.modelName === "frequency");
-
   const edgeBeatsBaseline =
     prod && baseline && prod.metrics.log_loss != null && baseline.metrics.log_loss != null
       ? prod.metrics.log_loss < baseline.metrics.log_loss
@@ -69,10 +81,11 @@ export default async function BacktestPage() {
     <div className="pt-6">
       <h1 className="card-title">BACKTEST PERFORMANCE — WALK-FORWARD OUT-OF-SAMPLE</h1>
 
-      {"error" in data && data.error && (
+      {failed && (
         <Notice kind="error">Cannot reach the API server. Run the engine backtest first.</Notice>
       )}
-      {rows.length === 0 && !("error" in data && data.error) && (
+      {!failed && data === null && <Notice kind="info">Loading…</Notice>}
+      {rows.length === 0 && data !== null && !failed && (
         <Notice kind="warn">No valid data available.</Notice>
       )}
 
@@ -92,9 +105,7 @@ export default async function BacktestPage() {
               ).map(([k, v]) => (
                 <div key={k} className="card !p-3 text-center">
                   <div className="text-[10px] uppercase tracking-wider text-slate-500">{k}</div>
-                  <div className="mt-1 font-mono text-sm font-bold text-slate-100" data-testid={`metric-${k}`}>
-                    {v}
-                  </div>
+                  <div className="mt-1 font-mono text-sm font-bold text-slate-100">{v}</div>
                 </div>
               ))}
             </div>
