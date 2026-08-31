@@ -1,5 +1,5 @@
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://thai2d-api.onrender.com";
 
 async function getJson<T>(path: string, timeoutMs = 20000): Promise<T | { error: string }> {
   // Vercel(iad1) -> Render(SIN) connections occasionally fail at the
@@ -128,6 +128,7 @@ export interface SyncStatus {
 }
 
 export const getSyncStatus = () => getJson<SyncStatus>("/api/sync/status");
+
 
 
 

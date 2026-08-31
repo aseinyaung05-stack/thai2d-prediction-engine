@@ -20,7 +20,18 @@ export function createApp(): express.Express {
   app.use(helmet());
   app.use(
     cors({
-      origin: config.corsOrigins,
+      // Exact origins from CORS_ORIGINS plus any *.vercel.app deployment
+      // (preview + production domains are unique per deploy).
+      origin: (origin, cb) => {
+        if (!origin) return cb(null, true); // server-to-server / same-origin
+        if (config.corsOrigins.includes(origin)) return cb(null, true);
+        try {
+          if (new URL(origin).hostname.endsWith(".vercel.app")) return cb(null, true);
+        } catch {
+          /* fall through */
+        }
+        cb(new Error("Not allowed by CORS"));
+      },
       methods: ["GET", "POST", "PATCH"],
       credentials: false,
     })
