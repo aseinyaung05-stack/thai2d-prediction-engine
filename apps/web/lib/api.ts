@@ -1,21 +1,42 @@
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+// Two paths to the Render API; the client auto-falls-back between them:
+//   1. DIRECT - https://thai2d-api.onrender.com (global CDN)
+//   2. PROXY  - same-origin /api/* via the Vercel route handler
+const DIRECT_API_URL = process.env.NEXT_PUBLIC_API_URL || "https://thai2d-api.onrender.com";
+const PROXY_PREFIX = "/api";
+let preferredBase: string | null = null;
 
-async function getJson<T>(path: string, timeoutMs = 20000): Promise<T | { error: string }> {
-  // Vercel(iad1) -> Render(SIN) connections occasionally fail at the
-  // connection level; retry transient network errors before giving up.
-  for (let attempt = 1; attempt <= 3; attempt++) {
+async function fetchJsonFrom<T>(
+  base: string,
+  path: string,
+  timeoutMs: number
+): Promise<T | { error: string }> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const res = await fetch(`${API_URL}${path}`, {
-        headers: { Accept: "application/json", ...(process.env.INTERNAL_BYPASS_TOKEN ? { "x-bypass-token": process.env.INTERNAL_BYPASS_TOKEN } : {}) },
+      const res = await fetch(`${base}${path}`, {
+        headers: { Accept: "application/json" },
         signal: AbortSignal.timeout(timeoutMs),
         cache: "no-store",
       });
       if (!res.ok) return { error: `HTTP ${res.status}` };
       return (await res.json()) as T;
     } catch (err) {
-      if (attempt === 3) return { error: "unreachable" };
-      await new Promise((r) => setTimeout(r, 600 * attempt));
+      if (attempt === 2) return { error: "unreachable" };
+      await new Promise((r) => setTimeout(r, 500 * attempt));
+    }
+  }
+  return { error: "unreachable" };
+}
+
+async function getJson<T>(path: string, timeoutMs = 15000): Promise<T | { error: string }> {
+  const bases = preferredBase
+    ? [preferredBase, preferredBase === DIRECT_API_URL ? PROXY_PREFIX : DIRECT_API_URL]
+    : [DIRECT_API_URL, PROXY_PREFIX];
+  for (const base of bases) {
+    const out = await fetchJsonFrom<T>(base, path, timeoutMs);
+    if (!("error" in out)) {
+      preferredBase = base; // remember the working path for subsequent calls
+      return out;
     }
   }
   return { error: "unreachable" };
