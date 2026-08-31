@@ -12,11 +12,13 @@ services:
     runtime: node
     plan: starter            # free tier sleeps; starter keeps it warm
     region: singapore        # closest Render region to Myanmar (Render has no Tokyo)
-    buildCommand: npm install --no-audit --no-fund && npx prisma generate --schema database/prisma/schema.prisma && npm run build:shared && npm run build:api
+    buildCommand: npm ci --include=dev --no-audit --no-fund && npx prisma generate --schema database/prisma/schema.prisma && npm run build:shared && npm run build:api
     startCommand: node apps/api/dist/apps/api/src/index.js
     healthCheckPath: /health
     autoDeploy: true
     envVars:
+      - key: NODE_VERSION
+        value: 22.14.0       # pin Node: Render default 26.x is too bleeding-edge
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
