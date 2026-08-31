@@ -41,5 +41,9 @@ export function apiRateLimiter(): ReturnType<typeof rateLimit> {
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "Too many requests — slow down." },
+    // Trusted server-to-server callers (web SSR) bypass the public limiter.
+    skip: (req) =>
+      Boolean(config.rateLimitBypassToken) &&
+      req.get("x-bypass-token") === config.rateLimitBypassToken,
   });
 }

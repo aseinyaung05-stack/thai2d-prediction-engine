@@ -4,8 +4,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 async function getJson<T>(path: string, timeoutMs = 20000): Promise<T | { error: string }> {
   try {
-    const res = await fetch(`${API_URL}${path}`, {
-      headers: { Accept: "application/json" },
+    const res = await fetch(`${path}`, {
+      headers: { Accept: "application/json", ...(process.env.INTERNAL_BYPASS_TOKEN ? { "x-bypass-token": process.env.INTERNAL_BYPASS_TOKEN } : {}) },
       signal: AbortSignal.timeout(timeoutMs),
       cache: "no-store",
     });
@@ -123,4 +123,5 @@ export interface SyncStatus {
 }
 
 export const getSyncStatus = () => getJson<SyncStatus>("/api/sync/status");
+
 

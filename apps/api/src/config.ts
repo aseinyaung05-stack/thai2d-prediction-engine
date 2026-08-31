@@ -43,6 +43,10 @@ export const config = {
   adminPassword: process.env.ADMIN_PASSWORD ?? "",
   rateLimitWindowMs: num("API_RATE_LIMIT_WINDOW_MS", 60000),
   rateLimitMax: num("API_RATE_LIMIT_MAX", 120),
+  // Server-to-server callers (e.g., the web SSR) present this header to skip
+  // the public rate limiter — shared Vercel egress IPs would otherwise be
+  // throttled collectively with the rest of the internet.
+  rateLimitBypassToken: process.env.RATE_LIMIT_BYPASS_TOKEN ?? "",
   corsOrigins: (process.env.CORS_ORIGINS ?? "http://localhost:3000")
     .split(",")
     .map((s) => s.trim())
