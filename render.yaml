@@ -1,8 +1,8 @@
 # ============================================================================
-# Render Blueprint — Thai 2D API (Node) + Prediction Engine (Python/Docker)
+# Render Blueprint ? Thai 2D API (Node) + Prediction Engine (Python/Docker)
 # Deploy: Render Dashboard -> New -> Blueprint -> point at this repo,
 #         or `render blueprint launch` with the Render CLI.
-# Database lives on Supabase (external) — paste its URLs as sync:false envs.
+# Database lives on Supabase (external) ? paste its URLs as sync:false envs.
 # ============================================================================
 
 services:
@@ -63,6 +63,10 @@ services:
     # The engine still serves GET /health for internal checks.
     autoDeploy: true
     envVars:
+      - key: DATABASE_URL
+        sync: false          # psycopg2 form (pydantic Settings field name)
+      - key: API_TOKEN
+        sync: false          # pydantic Settings field name for the bearer token
       - key: PREDICTION_DATABASE_URL
         sync: false          # paste Supabase URI (psycopg2 form)
       - key: PREDICTION_API_TOKEN
@@ -71,7 +75,7 @@ services:
         value: "460"
 
   # ------------------------------------------------- DAILY RETRAIN JOB ----
-  # Runs Mon-Fri at 11:30 UTC (18:00 Yangon) — after the 4:30 PM draw has
+  # Runs Mon-Fri at 11:30 UTC (18:00 Yangon) ? after the 4:30 PM draw has
   # landed and the API scheduler has synced it. Pulls fresh results, then
   # re-runs walk-forward backtests for both sessions and updates the model
   # registry (production model only changes if it beats baselines).
@@ -98,3 +102,4 @@ services:
         sync: false          # same strong password as the API
       - key: PREDICTION_API_TOKEN
         sync: false          # same token as API + engine
+
