@@ -31,7 +31,12 @@ export const config = {
   httpTimeoutMs: num("HTTP_TIMEOUT_MS", 12000),
   httpMaxRetries: num("HTTP_MAX_RETRIES", 3),
 
-  predictionServiceUrl: process.env.PREDICTION_SERVICE_URL ?? "http://localhost:8000",
+  // Render's fromService.hostport yields "host:port" without a scheme;
+  // normalize so fetch() always receives a valid absolute URL.
+  predictionServiceUrl: (() => {
+    const raw = process.env.PREDICTION_SERVICE_URL ?? "http://localhost:8000";
+    return /^https?:\/\//.test(raw) ? raw : `http://${raw}`;
+  })(),
   predictionApiToken: process.env.PREDICTION_API_TOKEN ?? "change-me-internal-token",
 
   adminUsername: process.env.ADMIN_USERNAME ?? "admin",
