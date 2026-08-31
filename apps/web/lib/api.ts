@@ -1,4 +1,3 @@
-import "server-only";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -129,6 +128,7 @@ export interface SyncStatus {
 }
 
 export const getSyncStatus = () => getJson<SyncStatus>("/api/sync/status");
+
 
 
 
