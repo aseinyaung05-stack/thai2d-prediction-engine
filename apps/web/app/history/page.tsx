@@ -18,7 +18,7 @@ export default async function HistoryPage() {
 
       {"error" in data && data.error && (
         <Notice kind="error">
-          API error: Historical data unavailable right now.
+          API error: DEBUG api_err={JSON.stringify((data as { error?: string }).error ?? null)} url={JSON.stringify(process.env.NEXT_PUBLIC_API_URL ?? null)}
         </Notice>
       )}
       {rows.length === 0 && !("error" in data && data.error) && (
@@ -71,5 +71,6 @@ export default async function HistoryPage() {
     </div>
   );
 }
+
 
 
