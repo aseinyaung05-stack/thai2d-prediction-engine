@@ -6,7 +6,7 @@ const DIRECT_API_URL = process.env.NEXT_PUBLIC_API_URL || "https://thai2d-api.on
 const PROXY_PREFIX = "/api";
 let preferredBase: string | null = null;
 
-async function fetchJsonFrom<T>(
+async function fetchJsonFrom<T extends object>(
   base: string,
   path: string,
   timeoutMs: number
@@ -28,7 +28,7 @@ async function fetchJsonFrom<T>(
   return { error: "unreachable" };
 }
 
-async function getJson<T>(path: string, timeoutMs = 15000): Promise<T | { error: string }> {
+async function getJson<T extends object>(path: string, timeoutMs = 15000): Promise<T | { error: string }> {
   const bases = preferredBase
     ? [preferredBase, preferredBase === DIRECT_API_URL ? PROXY_PREFIX : DIRECT_API_URL]
     : [DIRECT_API_URL, PROXY_PREFIX];
@@ -149,6 +149,7 @@ export interface SyncStatus {
 }
 
 export const getSyncStatus = () => getJson<SyncStatus>("/api/sync/status");
+
 
 
 
