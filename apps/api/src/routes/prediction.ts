@@ -18,6 +18,59 @@ function sessionFilter(s: SessionType): Prisma.PredictionRunWhereInput["session"
 
 type Json = Record<string, unknown>;
 
+type StoredRun = Prisma.PredictionRunGetPayload<{
+  include: { scores: { orderBy: { rank: "asc" }; take: 10 } };
+}>;
+
+/** Rebuild the API view object from a stored immutable snapshot row. */
+function storedToSessionView(row: StoredRun): Json {
+  const sections = (row.sectionScores ?? []) as Array<Json>;
+  const top10 = (row.top10 ?? []) as Array<Json>;
+  const best = [...sections].sort((a, b) => Number(a.rank) - Number(b.rank))[0];
+  const ratio = row.modelAgreementRatio;
+  const agreement =
+    ratio >= 0.75
+      ? "HIGH MODEL AGREEMENT"
+      : ratio >= 0.5
+        ? "MODERATE MODEL AGREEMENT"
+        : "LOW MODEL AGREEMENT";
+  const fallbackTop = (row.scores ?? []).map((sc) => ({
+    number: sc.number,
+    rank: sc.rank,
+    score: sc.calibratedProbability,
+    section: sc.section,
+    calibrated_probability: sc.calibratedProbability,
+  }));
+  const topCandidates = top10.length
+    ? top10
+    : (fallbackTop as unknown as Array<Json>);
+  return {
+    ...(row as unknown as Json),
+    top10: topCandidates,
+    section_scores: sections,
+    view: {
+      headline: {
+        highest_model_scored_section: best ? `SECTION ${best.section}` : "—",
+        top_candidates: topCandidates.slice(0, 5).map((t) => String(t.number)),
+        wording_note: "Highest model-scored section — NOT a guaranteed section.",
+      },
+      section_ranking: [...sections]
+        .sort((a, b) => Number(a.rank) - Number(b.rank))
+        .map((s) => `${s.section} ${(Number(s.probability) * 100).toFixed(1)}%`)
+        .join(" — "),
+      edge_detected: row.edgeDetected,
+      edge_notice: row.edgeNotice,
+      model_agreement: agreement,
+      tier_notice: "",
+      disclaimer:
+        "This application provides statistical analysis based on historical market/2D data. Model scores are estimates, not guarantees. Historical performance does not guarantee future results.",
+    },
+    model_agreement_ratio: ratio,
+    model_confidence: row.modelConfidence,
+    data_quality_score: row.dataQualityScore,
+  };
+}
+
 /** Proxy a request to the Python prediction service with the internal token. */
 async function proxyPrediction(path: string, method: "GET" | "POST" = "GET"): Promise<Response> {
   return fetch(`${config.predictionServiceUrl}${path}`, {
@@ -57,7 +110,7 @@ predictionRouter.get("/today", async (_req, res) => {
       include: { scores: { orderBy: { rank: "asc" }, take: 10 } },
     });
     if (storedToday) {
-      sessionsOut[s] = { ...(storedToday as unknown as Json), stale: false };
+      sessionsOut[s] = { ...storedToSessionView(storedToday), stale: false };
       anyLive = true;
       // Fire-and-forget background refresh so the next request is fresh.
       void proxyPrediction(`/predict/${s}?date=${yangonToday}`).catch(() => {});
@@ -93,7 +146,7 @@ predictionRouter.get("/today", async (_req, res) => {
       include: { scores: { orderBy: { rank: "asc" }, take: 10 } },
     });
     sessionsOut[s] = latest
-      ? { ...(latest as unknown as Json), stale: true }
+      ? { ...storedToSessionView(latest), stale: true }
       : { error: "No prediction available for this session yet.", stale: true };
   }
 
