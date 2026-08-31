@@ -50,7 +50,7 @@ export default function StatusPage() {
   async function fetchActiveModel(): Promise<ActiveModel | null> {
     try {
       const api =
-        process.env.NEXT_PUBLIC_API_URL ?? "https://thai2d-api.onrender.com";
+        process.env.NEXT_PUBLIC_API_URL ?? "";
       const res = await fetch(`${api}/api/model/performance`, {
         signal: AbortSignal.timeout(20000),
         cache: "no-store",
@@ -71,9 +71,9 @@ export default function StatusPage() {
         <h1 className="card-title">MODEL STATUS</h1>
         <Notice kind="error">Cannot reach the API server.</Notice>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Stat label="Data Quality" value="—" />
-          <Stat label="Records" value="—" />
-          <Stat label="Current Model" value="—" />
+          <Stat label="Data Quality" value="?" />
+          <Stat label="Records" value="?" />
+          <Stat label="Current Model" value="?" />
         </div>
         <p className="mt-4 text-xs text-slate-500">No valid data available.</p>
       </div>
@@ -87,17 +87,17 @@ export default function StatusPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat
           label="Historical Records"
-          value={model ? String(model.trainingRows) : "—"}
+          value={model ? String(model.trainingRows) : "?"}
         />
-        <Stat label="Current Model" value={model?.notes?.split(": ").pop() ?? "—"} />
-        <Stat label="Model Version" value={model?.version ?? "—"} />
+        <Stat label="Current Model" value={model?.notes?.split(": ").pop() ?? "?"} />
+        <Stat label="Model Version" value={model?.version ?? "?"} />
         <Stat
           label="Last Training Time"
           value={
             model?.creationTimestamp
               ? new Date(model.creationTimestamp).toISOString().slice(0, 16).replace("T", " ") +
                 " UTC"
-              : "—"
+              : "?"
           }
         />
         <Stat
@@ -108,10 +108,10 @@ export default function StatusPage() {
                   .toISOString()
                   .slice(0, 16)
                   .replace("T", " ") + " UTC"
-              : "—"
+              : "?"
           }
         />
-        <Stat label="Data Quality" value={model ? "98%" : "—"} />
+        <Stat label="Data Quality" value={model ? "98%" : "?"} />
       </div>
 
       <div className="card mt-4">
@@ -121,7 +121,7 @@ export default function StatusPage() {
             Component models vote on the highest-scored section; agreement is reported per session
             on the dashboard.
           </li>
-          <li>Low agreement ⇒ &ldquo;LOW MODEL AGREEMENT&rdquo; is displayed instead of confidence.</li>
+          <li>Low agreement ? &ldquo;LOW MODEL AGREEMENT&rdquo; is displayed instead of confidence.</li>
           <li>
             If no model beats the frequency baseline out-of-sample, the system retains the baseline
             and displays: No reliable predictive edge detected.
@@ -132,3 +132,4 @@ export default function StatusPage() {
     </div>
   );
 }
+
