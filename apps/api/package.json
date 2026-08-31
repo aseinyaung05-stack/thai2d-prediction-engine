@@ -32,7 +32,8 @@
     "@types/node-cron": "^3.0.11",
     "prisma": "^5.18.0",
     "tsx": "^4.16.0",
-    "typescript": "^5.5.0",
+    "typescript": "5.9.3",
     "vitest": "^2.0.0"
   }
 }
+
