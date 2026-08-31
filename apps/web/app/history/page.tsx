@@ -14,11 +14,11 @@ export default async function HistoryPage() {
 
   return (
     <div className="pt-6">
-      <h1 className="card-title">LATEST RESULTS — HISTORICAL DATA</h1>
+      <h1 className="card-title">LATEST RESULTS ? HISTORICAL DATA</h1>
 
       {"error" in data && data.error && (
         <Notice kind="error">
-          Cannot reach the API server. Historical data unavailable right now.
+          API error: {JSON.stringify((data as { error?: string }).error)}
         </Notice>
       )}
       {rows.length === 0 && !("error" in data && data.error) && (
@@ -56,7 +56,7 @@ export default async function HistoryPage() {
                   <span className="num-chip !h-7 !w-10">{r.twod}</span>
                 </td>
                 <td className="py-2 pr-4 font-mono text-slate-400">
-                  {r.setValue != null ? r.setValue.toLocaleString() : "—"}
+                  {r.setValue != null ? r.setValue.toLocaleString() : "?"}
                 </td>
                 <td className="py-2 pr-4 text-slate-500">{r.source}</td>
                 <td className="py-2 font-mono text-slate-500">{fmtUtc(r.sourceTimestamp)}</td>
@@ -71,3 +71,4 @@ export default async function HistoryPage() {
     </div>
   );
 }
+
