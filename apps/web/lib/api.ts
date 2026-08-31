@@ -3,17 +3,23 @@ import "server-only";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 async function getJson<T>(path: string, timeoutMs = 20000): Promise<T | { error: string }> {
-  try {
-    const res = await fetch(`${path}`, {
-      headers: { Accept: "application/json", ...(process.env.INTERNAL_BYPASS_TOKEN ? { "x-bypass-token": process.env.INTERNAL_BYPASS_TOKEN } : {}) },
-      signal: AbortSignal.timeout(timeoutMs),
-      cache: "no-store",
-    });
-    if (!res.ok) return { error: `HTTP ${res.status}` };
-    return (await res.json()) as T;
-  } catch {
-    return { error: "unreachable" };
+  // Vercel(iad1) -> Render(SIN) connections occasionally fail at the
+  // connection level; retry transient network errors before giving up.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(`${API_URL}${path}`, {
+        headers: { Accept: "application/json", ...(process.env.INTERNAL_BYPASS_TOKEN ? { "x-bypass-token": process.env.INTERNAL_BYPASS_TOKEN } : {}) },
+        signal: AbortSignal.timeout(timeoutMs),
+        cache: "no-store",
+      });
+      if (!res.ok) return { error: `HTTP ${res.status}` };
+      return (await res.json()) as T;
+    } catch (err) {
+      if (attempt === 3) return { error: "unreachable" };
+      await new Promise((r) => setTimeout(r, 600 * attempt));
+    }
   }
+  return { error: "unreachable" };
 }
 
 /* ----------------------------- dashboard types ---------------------------- */
