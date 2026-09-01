@@ -103,11 +103,23 @@ export async function ingestRecords(
   });
 
   // Pass 3: persist with DB-level duplicate protection.
+  // Finalized provider data OVERWRITES earlier provisional rows (e.g. rows
+  // captured from /live mid-session) so corrections propagate on re-sync.
   for (const r of batch) {
     try {
       await prisma.result.upsert({
         where: { date_session: { date: r.date, session: r.session } },
-        update: {}, // existing raw data is never overwritten
+        update: {
+          twod: r.twod,
+          digitTens: r.digitTens,
+          digitOnes: r.digitOnes,
+          setValue: r.setValue,
+          marketValue: r.marketValue,
+          source: opts.source,
+          sourceUrl: opts.sourceUrl ?? null,
+          sourceTimestamp: r.sourceTimestamp,
+          rawRecordHash: r.rawRecordHash,
+        },
         create: {
           date: r.date,
           session: r.session,

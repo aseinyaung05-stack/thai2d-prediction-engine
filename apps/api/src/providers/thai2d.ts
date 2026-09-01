@@ -29,8 +29,11 @@ export class Thai2DDataProvider implements DataProvider {
   }
 
   async fetchLatest(): Promise<RawResultRecord[]> {
-    const res = await fetchJsonWithRetry(this.name, `${this.base}/live`, this.headers);
-    return parseLivePayload(this.name, res.body);
+    // The /live endpoint reports the *provisional mid-session* number, which
+    // is NOT the official result and changes every tick. Storing it as a
+    // historical result corrupted recent days — so /live no longer produces
+    // result rows. Final results come exclusively from /2d_result?date=...
+    return [];
   }
 
   async fetchHistory(opts: FetchOptions = {}): Promise<RawResultRecord[]> {
