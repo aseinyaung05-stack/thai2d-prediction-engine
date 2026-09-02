@@ -156,3 +156,37 @@ export const getSyncStatus = () => getJson<SyncStatus>("/api/sync/status");
 
 
 
+
+/* -------------------------- monthly performance --------------------------- */
+
+export interface MonthlyDetailRow {
+  date: string;
+  session: string;
+  model_version: string;
+  predicted_section: string;
+  predicted_top_number: string | null;
+  actual_result: string | null;
+  actual_section: string | null;
+  section_hit: boolean;
+  actual_rank: number | null;
+  top10_hit: boolean | null;
+  outcome: string | null;
+}
+
+export interface MonthlyPerformance {
+  month: string;
+  graded: number;
+  section_hits: number;
+  section_hit_pct: number | null;
+  top10_hits: number;
+  top10_pct: number | null;
+  top1_hits: number;
+  top1_pct: number | null;
+  chance_benchmark: { section_pct: number; top10_pct: number; top1_pct: number };
+  by_session: Record<string, { graded: number; section_hits: number; top10_hits: number }>;
+  detail: MonthlyDetailRow[];
+  disclaimer: string;
+}
+
+export const getMonthlyPerformance = (month?: string) =>
+  getJson<MonthlyPerformance>(`/api/prediction/monthly-performance${month ? `?month=${month}` : ""}`);

@@ -5,12 +5,13 @@ import CountdownMM from "@/components/CountdownMM";
 import SectionBars from "@/components/SectionBars";
 import { Notice } from "@/components/Notices";
 import { getToday, type SessionPrediction, type TodayPayload } from "@/lib/api";
+import MonthlyPerformance from "@/components/MonthlyPerformance";
 
 const SECTION_LABELS: Record<string, string> = {
-  A: "A: 00–24",
-  B: "B: 25–49",
-  C: "C: 50–74",
-  D: "D: 75–99",
+  A: "A: 00?24",
+  B: "B: 25?49",
+  C: "C: 50?74",
+  D: "D: 75?99",
 };
 
 function SessionCard({
@@ -37,25 +38,25 @@ function SessionCard({
       </div>
 
       {!sp || sp.error ? (
-        <p className="text-xs text-slate-500">{sp?.error ?? "Loading…"}</p>
+        <p className="text-xs text-slate-500">{sp?.error ?? "Loading?"}</p>
       ) : (
         <>
           <dl className="mb-4 space-y-1 text-xs">
             <div className="flex justify-between">
               <dt className="text-slate-400">Highest Model-Scored Section</dt>
               <dd className="font-bold" data-testid="highest-section">
-                {headline?.highest_model_scored_section ?? "—"}
+                {headline?.highest_model_scored_section ?? "?"}
               </dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-slate-400">Top Candidates</dt>
               <dd className="font-mono font-semibold text-slate-100">
-                {(headline?.top_candidates ?? []).join(" ") || "—"}
+                {(headline?.top_candidates ?? []).join(" ") || "?"}
               </dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-slate-400">Model Agreement</dt>
-              <dd>{sp.view?.model_agreement ?? "—"}</dd>
+              <dd>{sp.view?.model_agreement ?? "?"}</dd>
             </div>
           </dl>
 
@@ -158,14 +159,14 @@ export default function DashboardPage() {
             TODAY&apos;S THAI 2D MODEL ANALYSIS
           </h1>
           <p className="mt-0.5 text-[11px] text-slate-500">
-            {ok && today.date ? today.date : ""} • Asia/Yangon • estimates only — not guarantees
+            {ok && today.date ? today.date : ""} ? Asia/Yangon ? estimates only ? not guarantees
           </p>
         </div>
         <CountdownMM />
       </div>
 
       {!ok && today !== null && (
-        <Notice kind="error">API server unreachable — please retry in a moment.</Notice>
+        <Notice kind="error">API server unreachable ? please retry in a moment.</Notice>
       )}
       {ok && today.notice && <Notice kind="warn">{today.notice}</Notice>}
 
@@ -180,9 +181,11 @@ export default function DashboardPage() {
         />
       </div>
 
+      <MonthlyPerformance />
       <p className="mt-6 text-center text-[11px] text-slate-600">
-        DATA → FEATURES → MODEL → 00–99 SCORES → FOUR SECTIONS → BACKTEST → DASHBOARD
+        DATA ? FEATURES ? MODEL ? 00?99 SCORES ? FOUR SECTIONS ? BACKTEST ? DASHBOARD
       </p>
     </div>
   );
 }
+
