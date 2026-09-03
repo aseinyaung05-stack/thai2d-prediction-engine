@@ -84,6 +84,122 @@ async function proxyPrediction(path: string, method: "GET" | "POST" = "GET"): Pr
 }
 
 /**
+ * GET /api/prediction/monthly-performance?month=YYYY-MM
+ *
+ * Month-to-date prediction scorecard: for every graded prediction in the
+ * month (a stored snapshot whose draw has been realized), compare the
+ * predicted highest-scored section with the actual result's section.
+ * SECTION HIT % = section hits / graded predictions.
+ * Benchmark: 25% is random chance when picking 1 of 4 sections.
+ *
+ * NOTE: registered BEFORE the /:session routes so "monthly-performance"
+ * is never captured as a session parameter.
+ */
+predictionRouter.get("/monthly-performance", async (req, res) => {
+  const monthParam = typeof req.query.month === "string" ? req.query.month : null;
+  const nowYangon = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Yangon",
+    year: "numeric",
+    month: "2-digit",
+  }).format(new Date());
+  const month = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : nowYangon;
+
+  // Make sure realized draws are attached to stored snapshots first.
+  try {
+    await attachPendingOutcomes();
+  } catch {
+    /* outcomes attachment is best-effort; stale grading is acceptable */
+  }
+
+  const startDate = new Date(`${month}-01T00:00:00Z`);
+  const [yy, mm] = month.split("-").map(Number);
+  const endDate = new Date(Date.UTC(yy, mm, 1)); // first day of next month
+
+  const runs = await prisma.predictionRun.findMany({
+    where: {
+      sessionDate: { gte: startDate, lt: endDate },
+      actualResult: { not: null },
+    },
+    orderBy: [{ sessionDate: "asc" }, { session: "asc" }],
+  });
+
+  // Keep only the LATEST graded run per (date, session) so repeat
+  // generations never double-count the same draw.
+  const latestByDraw = new Map<string, (typeof runs)[number]>();
+  for (const run of runs) {
+    const key = `${run.sessionDate.toISOString().slice(0, 10)}|${run.session}`;
+    const prev = latestByDraw.get(key);
+    if (!prev || prev.predictionTimestampUtc < run.predictionTimestampUtc) {
+      latestByDraw.set(key, run);
+    }
+  }
+
+  let graded = 0;
+  let sectionHits = 0;
+  let top10Hits = 0;
+  let top1Hits = 0;
+  const bySession: Record<string, { graded: number; section_hits: number; top10_hits: number }> = {
+    MORNING: { graded: 0, section_hits: 0, top10_hits: 0 },
+    AFTERNOON: { graded: 0, section_hits: 0, top10_hits: 0 },
+  };
+  const detail: Array<Record<string, unknown>> = [];
+
+  for (const run of latestByDraw.values()) {
+    const sections = (run.sectionScores ?? []) as Array<Record<string, unknown>>;
+    const best = [...sections].sort(
+      (a, b) => Number(a.rank ?? 99) - Number(b.rank ?? 99)
+    )[0];
+    const predictedSection = best ? String(best.section) : null;
+    if (!predictedSection || !run.actualSection) continue;
+
+    graded++;
+    const hit = predictedSection === run.actualSection;
+    if (hit) sectionHits++;
+    if (run.actualTop10Hit) top10Hits++;
+    if (run.predictionOutcome === "TOP_1") top1Hits++;
+
+    const sess = run.session as string;
+    bySession[sess] ??= { graded: 0, section_hits: 0, top10_hits: 0 };
+    bySession[sess].graded++;
+    if (hit) bySession[sess].section_hits++;
+    if (run.actualTop10Hit) bySession[sess].top10_hits++;
+
+    const runTop10 = (run.top10 ?? []) as Array<Record<string, unknown>>;
+    detail.push({
+      date: run.sessionDate,
+      session: run.session,
+      model_version: run.modelVersion,
+      predicted_section: predictedSection,
+      predicted_top_number: runTop10.length ? String(runTop10[0].number) : null,
+      actual_result: run.actualResult,
+      actual_section: run.actualSection,
+      section_hit: hit,
+      actual_rank: run.actualRank,
+      top10_hit: run.actualTop10Hit,
+      outcome: run.predictionOutcome,
+    });
+  }
+
+  const pct = (hits: number) => (graded ? Number(((hits / graded) * 100).toFixed(1)) : null);
+
+  res.json({
+    month,
+    graded,
+    section_hits: sectionHits,
+    section_hit_pct: pct(sectionHits),
+    top10_hits: top10Hits,
+    top10_pct: pct(top10Hits),
+    top1_hits: top1Hits,
+    top1_pct: pct(top1Hits),
+    chance_benchmark: { section_pct: 25, top10_pct: 10, top1_pct: 1 },
+    by_session: bySession,
+    detail,
+    disclaimer:
+      "Section hit = the predicted highest-scored section matched the actual result's section. 25% / 10% / 1% are the random-chance benchmarks for 4 sections / top-10 of 100 / top-1 of 100. Past performance does not guarantee future results.",
+  });
+});
+
+/**
  * GET /api/prediction/today
  * STORED-FIRST design: the immutable snapshot for (today, session) is served
  * instantly from PostgreSQL. The live engine is only consulted when no
@@ -234,120 +350,5 @@ predictionRouter.get("/:session/sections", async (req, res) => {
   }
 });
 
-/**
- * GET /api/prediction/monthly-performance?month=YYYY-MM
- *
- * Month-to-date prediction scorecard: for every graded prediction in the
- * month (a stored snapshot whose draw has been realized), compare the
- * predicted highest-scored section with the actual result's section.
- *
- * SECTION HIT % = section hits / graded predictions.
- * Benchmark: 25% is random chance when picking 1 of 4 sections.
- */
-predictionRouter.get("/monthly-performance", async (req, res) => {
-  const monthParam = typeof req.query.month === "string" ? req.query.month : null;
-  const nowYangon = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Yangon",
-    year: "numeric",
-    month: "2-digit",
-  }).format(new Date());
-  const month = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : nowYangon;
-
-  // Make sure realized draws are attached to stored snapshots first.
-  try {
-    await attachPendingOutcomes();
-  } catch {
-    /* outcomes attachment is best-effort; stale grading is acceptable */
-  }
-
-  const startDate = new Date(`${month}-01T00:00:00Z`);
-  const [yy, mm] = month.split("-").map(Number);
-  const endDate = new Date(Date.UTC(yy, mm, 1)); // first day of next month
-
-  const runs = await prisma.predictionRun.findMany({
-    where: {
-      sessionDate: { gte: startDate, lt: endDate },
-      actualResult: { not: null },
-    },
-    orderBy: [{ sessionDate: "asc" }, { session: "asc" }],
-  });
-
-  // Keep only the LATEST graded run per (date, session) so repeat
-  // generations never double-count the same draw.
-  const latestByDraw = new Map<string, (typeof runs)[number]>();
-  for (const run of runs) {
-    const key = `${run.sessionDate.toISOString().slice(0, 10)}|${run.session}`;
-    const prev = latestByDraw.get(key);
-    if (!prev || prev.predictionTimestampUtc < run.predictionTimestampUtc) {
-      latestByDraw.set(key, run);
-    }
-  }
-
-  let graded = 0;
-  let sectionHits = 0;
-  let top10Hits = 0;
-  let top1Hits = 0;
-  const bySession: Record<string, { graded: number; section_hits: number; top10_hits: number }> = {
-    MORNING: { graded: 0, section_hits: 0, top10_hits: 0 },
-    AFTERNOON: { graded: 0, section_hits: 0, top10_hits: 0 },
-  };
-  const detail: Array<Record<string, unknown>> = [];
-
-  for (const run of latestByDraw.values()) {
-    const sections = (run.sectionScores ?? []) as Array<Record<string, unknown>>;
-    const best = [...sections].sort(
-      (a, b) => Number(a.rank ?? 99) - Number(b.rank ?? 99)
-    )[0];
-    const predictedSection = best ? String(best.section) : null;
-    if (!predictedSection || !run.actualSection) continue;
-
-    graded++;
-    const hit = predictedSection === run.actualSection;
-    if (hit) sectionHits++;
-    if (run.actualTop10Hit) top10Hits++;
-    if (run.predictionOutcome === "TOP_1") top1Hits++;
-
-    const sess = run.session as string;
-    bySession[sess] ??= { graded: 0, section_hits: 0, top10_hits: 0 };
-    bySession[sess].graded++;
-    if (hit) bySession[sess].section_hits++;
-    if (run.actualTop10Hit) bySession[sess].top10_hits++;
-
-    const runTop10 = (run.top10 ?? []) as Array<Record<string, unknown>>;
-    detail.push({
-      date: run.sessionDate,
-      session: run.session,
-      model_version: run.modelVersion,
-      predicted_section: predictedSection,
-      predicted_top_number: runTop10.length
-        ? String(runTop10[0].number)
-        : null,
-      actual_result: run.actualResult,
-      actual_section: run.actualSection,
-      section_hit: hit,
-      actual_rank: run.actualRank,
-      top10_hit: run.actualTop10Hit,
-      outcome: run.predictionOutcome,
-    });
-  }
-
-  const pct = (hits: number) => (graded ? Number(((hits / graded) * 100).toFixed(1)) : null);
-
-  res.json({
-    month,
-    graded,
-    section_hits: sectionHits,
-    section_hit_pct: pct(sectionHits),
-    top10_hits: top10Hits,
-    top10_pct: pct(top10Hits),
-    top1_hits: top1Hits,
-    top1_pct: pct(top1Hits),
-    chance_benchmark: { section_pct: 25, top10_pct: 10, top1_pct: 1 },
-    by_session: bySession,
-    detail,
-    disclaimer:
-      "Section hit = the predicted highest-scored section matched the actual result's section. 25% / 10% / 1% are the random-chance benchmarks for 4 sections / top-10 of 100 / top-1 of 100. Past performance does not guarantee future results.",
-  });
-});
 
 
